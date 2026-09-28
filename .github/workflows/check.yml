@@ -1,0 +1,31 @@
+name: Check and build
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  collector:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: false
+      - run: go test -race ./... && go vet ./...
+        working-directory: collector
+  mac:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: false
+      - run: bash scripts/build-mac.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PlanWatch-mac-universal
+          path: dist/PlanWatch-mac-universal.zip
