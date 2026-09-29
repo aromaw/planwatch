@@ -16,7 +16,9 @@ extension Provider {
 @MainActor
 struct Dashboard: View {
     @ObservedObject var store: Store
+    #if canImport(SwiftUICore)
     @Environment(\.openSettings) private var openSettings
+    #endif
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center) {
@@ -71,7 +73,14 @@ struct Dashboard: View {
         .frame(width: 400)
         .background(Color(nsColor: .windowBackgroundColor))
     }
-    private func showSettings() { NSApp.activate(ignoringOtherApps: true); openSettings() }
+    private func showSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        #if canImport(SwiftUICore)
+        openSettings()
+        #else
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        #endif
+    }
 }
 
 @MainActor

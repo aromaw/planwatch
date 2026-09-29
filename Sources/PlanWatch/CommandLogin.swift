@@ -49,21 +49,21 @@ final class WebLoginController: NSWindowController, WKNavigationDelegate, WKUIDe
                 guard let self else { return }
                 let eligible = cookies.filter {
                     let domain = $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
-                    return (domain == host || domain == "api." + host || domain == "www." + host) && !($0.expiresDate.map { $0 < Date() } ?? false)
+                    return (domain == self.host || domain == "api." + self.host || domain == "www." + self.host) && !($0.expiresDate.map { $0 < Date() } ?? false)
                 }
-                if isKimi {
+                if self.isKimi {
                     if let cookie = eligible.first(where: { $0.name == "kimi-auth" && !$0.value.isEmpty }) {
-                        onLogin("web:" + cookie.value); close(); return
+                        self.onLogin("web:" + cookie.value); self.close(); return
                     }
-                    status.stringValue = "尚未找到 Kimi 登录会话。请完成登录，或在设置中使用 API Key。"
+                    self.status.stringValue = "尚未找到 Kimi 登录会话。请完成登录，或在设置中使用 API Key。"
                     return
                 }
                 for name in Self.sessionNames {
                     if let cookie = eligible.first(where: { $0.name == name && !$0.value.isEmpty }) {
-                        onLogin("\(cookie.name)=\(cookie.value)"); close(); return
+                        self.onLogin("\(cookie.name)=\(cookie.value)"); self.close(); return
                     }
                 }
-                status.stringValue = "尚未找到登录会话。请先完成登录，或在账号设置中粘贴 Cookie。"
+                self.status.stringValue = "尚未找到登录会话。请先完成登录，或在账号设置中粘贴 Cookie。"
             }
         }
     }
