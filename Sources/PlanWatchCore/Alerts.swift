@@ -24,9 +24,10 @@ public enum Alerts {
         if let next = window.resetAt, let old = record.resetAt {
             // Rolling windows move their reset forward by roughly the time between
             // readings; that drift is the same cycle. A passed reset or a larger jump is new.
-            let elapsed = record.seenAt.map { max(0, time - $0) } ?? 0
             let drift = next - old
-            if (time >= old && abs(drift) > 120) || drift < -120 || drift > elapsed + 120 {
+            // Records saved before seenAt existed have no baseline; seed it without rearming.
+            let jumped = record.seenAt.map { drift > max(0, time - $0) + 120 } ?? false
+            if (time >= old && abs(drift) > 120) || drift < -120 || jumped {
                 record = AlertRecord(); record.account = account
             }
         }

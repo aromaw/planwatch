@@ -72,6 +72,15 @@ final class AlertsTests: XCTestCase {
         let later = now.addingTimeInterval(6 * 3600)
         XCTAssertEqual(Alerts.evaluate(window: window(90, reset: reset + 36000), account: nil, previous: saved, now: later).level, 80)
     }
+    func testLegacyRecordWithoutSeenAtDoesNotRealertOnDrift() {
+        var legacy = Alerts.delivered(Alerts.evaluate(window: window(90, reset: now.timeIntervalSince1970 + 3600),
+                                                      account: nil, previous: nil, now: now), now: now)
+        legacy.seenAt = nil
+        let later = now.addingTimeInterval(300)
+        let d = Alerts.evaluate(window: window(90, reset: later.timeIntervalSince1970 + 3600), account: nil, previous: legacy, now: later)
+        XCTAssertNil(d.level)
+        XCTAssertEqual(d.record.seenAt, later.timeIntervalSince1970)
+    }
     func testOldRecordsWithoutSeenAtStillDecode() throws {
         let record = try JSONDecoder().decode(AlertRecord.self, from: Data(#"{"level":80,"lowReadings":0,"sentAt":1}"#.utf8))
         XCTAssertEqual(record.level, 80)
