@@ -70,7 +70,7 @@ final class AlertsTests: XCTestCase {
         let reset = now.timeIntervalSince1970 + 3600
         let saved = Alerts.delivered(Alerts.evaluate(window: window(90, reset: reset), account: nil, previous: nil, now: now), now: now)
         let later = now.addingTimeInterval(6 * 3600)
-        XCTAssertEqual(Alerts.evaluate(window: window(90, reset: reset + 18000), account: nil, previous: saved, now: later).level, 80)
+        XCTAssertEqual(Alerts.evaluate(window: window(90, reset: reset + 36000), account: nil, previous: saved, now: later).level, 80)
     }
     func testOldRecordsWithoutSeenAtStillDecode() throws {
         let record = try JSONDecoder().decode(AlertRecord.self, from: Data(#"{"level":80,"lowReadings":0,"sentAt":1}"#.utf8))
