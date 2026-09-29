@@ -32,7 +32,7 @@ func (f *fetcher) kimiPost(ctx context.Context, host, path, token, body string) 
 			var claims object
 			if json.Unmarshal(b, &claims) == nil {
 				for claim, header := range map[string]string{"device_id": "X-Msh-Device-Id", "ssid": "X-Msh-Session-Id", "sub": "X-Traffic-Id"} {
-					if v := str(claims[claim]); len(v) < 1024 && !strings.ContainsAny(v, "\r\n") {
+					if v := str(claims[claim]); v != "" && len(v) < 1024 && printableASCII(v) {
 						req.Header.Set(header, v)
 					}
 				}
@@ -96,4 +96,15 @@ func parseKimiWeb(usage, stats object, now time.Time) Snapshot {
 		}
 	}
 	return s
+}
+
+// Header values from untrusted token claims must be plain printable ASCII, or the
+// HTTP client rejects the whole request.
+func printableASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }

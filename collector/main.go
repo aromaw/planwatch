@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -58,8 +59,8 @@ func (f *fetcher) send(req *http.Request) (object, error) {
 		retry := int64(120)
 		if t, e := http.ParseTime(resp.Header.Get("Retry-After")); e == nil {
 			retry = int64(t.Sub(f.now()).Seconds())
-		} else if n, ok := number(resp.Header.Get("Retry-After")); ok && n > 0 && n < 86400 {
-			retry = int64(n)
+		} else if n, ok := number(resp.Header.Get("Retry-After")); ok && n > 0 {
+			retry = int64(math.Min(n, 86400))
 		}
 		if retry < 30 {
 			retry = 30
@@ -77,7 +78,7 @@ func (f *fetcher) send(req *http.Request) (object, error) {
 		return nil, failure("schema", "额度响应过大或不完整")
 	}
 	var root object
-	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	if dec.Decode(&root) != nil || root == nil {
 		return nil, failure("schema", "未收到有效的额度数据，接口可能已变更")

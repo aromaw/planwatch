@@ -141,7 +141,12 @@ func labelForMinutes(n float64) string {
 		return "5 小时"
 	case 10080:
 		return "周额度"
-	default:
-		return strconv.FormatFloat(n, 'f', -1, 64) + " 分钟"
 	}
+	if n >= 1440 && math.Mod(n, 1440) == 0 {
+		return strconv.FormatFloat(n/1440, 'f', -1, 64) + " 天"
+	}
+	if n >= 60 && math.Mod(n, 60) == 0 {
+		return strconv.FormatFloat(n/60, 'f', -1, 64) + " 小时"
+	}
+	return strconv.FormatFloat(n, 'f', -1, 64) + " 分钟"
 }

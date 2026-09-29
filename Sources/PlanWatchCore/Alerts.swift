@@ -6,6 +6,7 @@ public struct AlertRecord: Codable, Equatable {
     public var account: String?
     public var lowReadings = 0
     public var sentAt: Double = 0
+    public var seenAt: Double?
     public init() {}
 }
 
@@ -19,10 +20,18 @@ public enum Alerts {
     public static func evaluate(window: QuotaWindow, account: String?, previous: AlertRecord?, now: Date) -> AlertDecision {
         var record = previous ?? AlertRecord()
         if record.account != account { record = AlertRecord(); record.account = account }
-        if let next = window.resetAt, let old = record.resetAt, abs(next - old) > 120 {
-            record = AlertRecord(); record.account = account
+        let time = now.timeIntervalSince1970
+        if let next = window.resetAt, let old = record.resetAt {
+            // Rolling windows move their reset forward by roughly the time between
+            // readings; that drift is the same cycle. A passed reset or a larger jump is new.
+            let elapsed = record.seenAt.map { max(0, time - $0) } ?? 0
+            let drift = next - old
+            if (time >= old && abs(drift) > 120) || drift < -120 || drift > elapsed + 120 {
+                record = AlertRecord(); record.account = account
+            }
         }
         record.resetAt = window.resetAt
+        record.seenAt = time
         guard let p = window.percent, p.isFinite, p >= 0, !window.awaitingReset(at: now) else {
             return AlertDecision(level: nil, record: record)
         }

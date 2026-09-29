@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"math"
@@ -101,7 +102,7 @@ func TestOpenCodeMissingMonthlyAndModels(t *testing.T) {
 }
 func TestCodexUsesDurationsAndAvoidsDuplicateLegacyPool(t *testing.T) {
 	s := parseCodex(payload(t, `{"rateLimits":{"primary":{"usedPercent":99,"windowDurationMins":300}},"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":0,"windowDurationMins":300},"secondary":{"usedPercent":81,"windowDurationMins":10080}},"other":{"limitName":"Other","primary":{"usedPercent":50,"windowDurationMins":60}}}}`), testNow)
-	if len(s.Windows) != 3 || s.Windows[1].Label != "周额度" || s.Windows[2].Label != "60 分钟" {
+	if len(s.Windows) != 3 || s.Windows[1].Label != "周额度" || s.Windows[2].Label != "1 小时" {
 		t.Fatal(s)
 	}
 	checkPercent(t, s.Windows[0], 0)
@@ -211,4 +212,43 @@ func TestPartialCommandLookupPreservesUpstreamBackoff(t *testing.T) {
 		t.Fatal(s)
 	}
 	checkPercent(t, s.Windows[2], 50)
+}
+
+func TestWindowLabels(t *testing.T) {
+	for n, want := range map[float64]string{300: "5 小时", 10080: "周额度", 60: "1 小时", 1440: "1 天", 90: "90 分钟"} {
+		if got := labelForMinutes(n); got != want {
+			t.Fatalf("%v: got %q, want %q", n, got, want)
+		}
+	}
+}
+func TestOpenCodeIgnoresMalformedModelEntries(t *testing.T) {
+	s := parseOpenCode(payload(t, `{"usage":{"rolling":{"percent":20},"models":{"broken":null,"text":"x","model-a":{"rolling":{"percent":10}}}}}`), testNow)
+	if len(s.Windows) != 6 || s.Windows[3].Pool != "model-a" {
+		t.Fatal(s)
+	}
+}
+func TestLongRetryAfterIsCappedNotShortened(t *testing.T) {
+	f := newFetcher()
+	f.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 429, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{"Retry-After": []string{"200000"}}}, nil
+	})
+	s := f.fetch(context.Background(), Request{Provider: "opencode", Credential: "test"})
+	if s.RetryAfter != 86400 {
+		t.Fatal(s)
+	}
+}
+func TestKimiWebSkipsUnsafeTokenClaims(t *testing.T) {
+	claims := base64.RawURLEncoding.EncodeToString([]byte(`{"device_id":"","ssid":"caf\u00e9\u0007","sub":"user-1"}`))
+	token := "h." + claims + ".s"
+	f := newFetcher()
+	f.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
+		if _, ok := r.Header["X-Msh-Device-Id"]; ok || r.Header.Get("X-Msh-Session-Id") != "" || r.Header.Get("X-Traffic-Id") != "user-1" {
+			t.Fatal(r.Header)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"usages":[{"scope":"FEATURE_CODING","detail":{"used":10,"limit":100}}]}`)), Header: http.Header{}}, nil
+	})
+	s := f.fetch(context.Background(), Request{Provider: "kimi", Credential: "web:" + token})
+	if s.Error != "" {
+		t.Fatal(s)
+	}
 }

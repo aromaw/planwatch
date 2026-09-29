@@ -163,6 +163,7 @@ struct AccountSection: View {
             Label(provider.name, systemImage: provider.symbol).foregroundStyle(provider.tint)
         }
         .onAppear { if provider != .codex { hasCredential = store.credentialExists(provider) } }
+        .onChange(of: store.credentialRevision) { if provider != .codex { hasCredential = store.credentialExists(provider) } }
     }
 
     private func saveCredential() {

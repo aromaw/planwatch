@@ -5,6 +5,8 @@ import PlanWatchCore
 
 final class ApplicationDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A collector that exits before reading its request must not kill the app with SIGPIPE.
+        signal(SIGPIPE, SIG_IGN)
         NSApp.setActivationPolicy(.accessory)
         UNUserNotificationCenter.current().delegate = self
     }
