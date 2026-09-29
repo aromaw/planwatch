@@ -12,6 +12,13 @@ final class Store: ObservableObject {
             save(configuration, file: "settings.json")
             if oldValue.codexPath != configuration.codexPath { invalidate(.codex) }
             if oldValue.kimiRegion != configuration.kimiRegion { invalidate(.kimi) }
+            if oldValue.interval != configuration.interval {
+                // Reschedule successful providers; failing ones keep their backoff.
+                for (id, next) in nextFetch where failures[id, default: 0] == 0 {
+                    nextFetch[id] = min(next, Date().addingTimeInterval(max(30, configuration.interval)))
+                }
+                refresh()
+            }
             if oldValue.enabled != configuration.enabled { refresh(force: true) }
         }
     }
@@ -21,6 +28,8 @@ final class Store: ObservableObject {
     @Published var notice: String?
     @Published var now = Date()
     @Published var notificationAllowed = false
+    /// Bumped whenever a stored credential changes, so settings rows can re-check the keychain.
+    @Published private(set) var credentialRevision = 0
     let demo: Bool
     private var records: [String: AlertRecord] = [:]
     private var nextFetch: [String: Date] = [:]
@@ -39,11 +48,11 @@ final class Store: ObservableObject {
             snapshots = Demo.snapshots
             return
         }
-        do {
-            configuration = try Storage.load(Configuration.self, file: "settings.json") ?? Configuration()
-            snapshots = try Storage.load([String: Snapshot].self, file: "snapshots.json") ?? [:]
-            records = try Storage.load([String: AlertRecord].self, file: "alerts.json") ?? [:]
-        } catch { notice = "本地配置无法读取，已使用默认设置。请重新检查账号配置。" }
+        // Load each file on its own: a damaged cache must not discard settings or alert history.
+        do { configuration = try Storage.load(Configuration.self, file: "settings.json") ?? Configuration() }
+        catch { notice = "本地配置无法读取，已使用默认设置。请重新检查账号配置。" }
+        snapshots = (try? Storage.load([String: Snapshot].self, file: "snapshots.json")) ?? [:]
+        records = (try? Storage.load([String: AlertRecord].self, file: "alerts.json")) ?? [:]
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
@@ -87,8 +96,9 @@ final class Store: ObservableObject {
             let id = provider.id
             guard !inFlight.contains(id) else { continue }
             if let until = rateLimitedUntil[id], until > Date() { continue }
-            // Respect upstream backoff even when the user presses refresh.
-            if let next = nextFetch[id], next > Date(), (!force || failures[id, default: 0] > 0) { continue }
+            // Upstream rate limits are always respected above; a manual refresh or wake
+            // skips the local schedule and failure backoff so recovered networks retry at once.
+            if let next = nextFetch[id], next > Date(), !force { continue }
             let credential: String
             do { credential = provider == .codex ? "" : try Keychain.read(id) }
             catch { errors[id] = error.localizedDescription; continue }
@@ -131,6 +141,7 @@ final class Store: ObservableObject {
             throw AppError("请输入有效的凭证")
         }
         try Keychain.save(clean, for: provider.id)
+        credentialRevision += 1
         invalidate(provider)
         configuration.enabled[provider.id] = true
         refresh(force: true)
@@ -138,6 +149,7 @@ final class Store: ObservableObject {
     func disconnect(_ provider: Provider) throws {
         guard !demo else { return }
         try Keychain.save("", for: provider.id)
+        credentialRevision += 1
         configuration.enabled[provider.id] = false
         invalidate(provider)
         if provider == .commandcode || provider == .kimi { WebLoginController.clearSession(kimi: provider == .kimi) }

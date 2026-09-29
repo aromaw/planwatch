@@ -56,4 +56,43 @@ final class AlertsTests: XCTestCase {
         XCTAssertNil(snapshot.windows[0].remainingPercent)
         XCTAssertEqual(snapshot.windows[1].remainingPercent, 100)
     }
+    func testRollingResetDriftIsSameCycle() {
+        var record = Alerts.delivered(Alerts.evaluate(window: window(90, reset: now.timeIntervalSince1970 + 3600),
+                                                      account: nil, previous: nil, now: now), now: now)
+        for step in 1...5 {
+            let later = now.addingTimeInterval(Double(step) * 300)
+            let d = Alerts.evaluate(window: window(90, reset: later.timeIntervalSince1970 + 3600), account: nil, previous: record, now: later)
+            XCTAssertNil(d.level)
+            record = d.record
+        }
+    }
+    func testNewCycleAfterLongSleepAlertsAgain() {
+        let reset = now.timeIntervalSince1970 + 3600
+        let saved = Alerts.delivered(Alerts.evaluate(window: window(90, reset: reset), account: nil, previous: nil, now: now), now: now)
+        let later = now.addingTimeInterval(6 * 3600)
+        XCTAssertEqual(Alerts.evaluate(window: window(90, reset: reset + 36000), account: nil, previous: saved, now: later).level, 80)
+    }
+    func testLegacyRecordWithoutSeenAtDoesNotRealertOnDrift() {
+        var legacy = Alerts.delivered(Alerts.evaluate(window: window(90, reset: now.timeIntervalSince1970 + 3600),
+                                                      account: nil, previous: nil, now: now), now: now)
+        legacy.seenAt = nil
+        let later = now.addingTimeInterval(300)
+        let d = Alerts.evaluate(window: window(90, reset: later.timeIntervalSince1970 + 3600), account: nil, previous: legacy, now: later)
+        XCTAssertNil(d.level)
+        XCTAssertEqual(d.record.seenAt, later.timeIntervalSince1970)
+    }
+    func testOldRecordsWithoutSeenAtStillDecode() throws {
+        let record = try JSONDecoder().decode(AlertRecord.self, from: Data(#"{"level":80,"lowReadings":0,"sentAt":1}"#.utf8))
+        XCTAssertEqual(record.level, 80)
+        XCTAssertNil(record.seenAt)
+    }
+    func testPartialSettingsKeepDefaults() throws {
+        let config = try JSONDecoder().decode(Configuration.self, from: Data(#"{"interval":300,"enabled":{"kimi":true}}"#.utf8))
+        XCTAssertEqual(config.interval, 300)
+        XCTAssertEqual(config.enabled, ["kimi": true])
+        XCTAssertEqual(config.kimiRegion, "china")
+        XCTAssertEqual(config.selectedProvider, "codex")
+        let roundTrip = try JSONDecoder().decode(Configuration.self, from: JSONEncoder().encode(config))
+        XCTAssertEqual(roundTrip.interval, 300)
+    }
 }

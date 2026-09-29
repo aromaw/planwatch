@@ -88,6 +88,19 @@ public struct Configuration: Codable {
     public var selectedProvider = "codex"
     public var showMenuPercent = false
     public init() {}
+
+    // Missing keys keep their defaults so settings written by older versions still load.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Configuration()
+        enabled = try c.decodeIfPresent([String: Bool].self, forKey: .enabled) ?? d.enabled
+        codexPath = try c.decodeIfPresent(String.self, forKey: .codexPath) ?? d.codexPath
+        kimiRegion = try c.decodeIfPresent(String.self, forKey: .kimiRegion) ?? d.kimiRegion
+        notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? d.notificationsEnabled
+        interval = try c.decodeIfPresent(Double.self, forKey: .interval) ?? d.interval
+        selectedProvider = try c.decodeIfPresent(String.self, forKey: .selectedProvider) ?? d.selectedProvider
+        showMenuPercent = try c.decodeIfPresent(Bool.self, forKey: .showMenuPercent) ?? d.showMenuPercent
+    }
 }
 
 public struct FetchRequest: Encodable {

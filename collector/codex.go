@@ -69,12 +69,46 @@ func fetchCodex(ctx context.Context, r Request, now time.Time) (Snapshot, error)
 	if encoder.Encode(object{"id": 1, "method": "initialize", "params": object{"clientInfo": object{"name": "planwatch", "title": "PlanWatch", "version": "0.1.0"}, "capabilities": object{}}}) != nil {
 		return Snapshot{}, failure("cli", "Codex 初始化失败")
 	}
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 8192), 2*1024*1024)
+	lines := make(chan []byte)
+	go func() {
+		defer close(lines)
+		scanner := bufio.NewScanner(stdout)
+		scanner.Buffer(make([]byte, 8192), 2*1024*1024)
+		for scanner.Scan() {
+			select {
+			case lines <- append([]byte(nil), scanner.Bytes()...):
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 	var rates, account object
-	for scanner.Scan() {
+	// Account details are optional; once quotas arrive, do not wait for the full timeout.
+	var grace <-chan time.Time
+	finish := func() Snapshot {
+		s := parseCodex(rates, now)
+		a := obj(account["account"])
+		s.Account = str(a["email"])
+		if p := str(a["planType"]); p != "" {
+			s.Plan = p
+		}
+		return s
+	}
+	for {
+		var line []byte
+		var open bool
+		select {
+		case line, open = <-lines:
+		case <-grace:
+			return finish(), nil
+		case <-ctx.Done():
+			open = false
+		}
+		if !open {
+			break
+		}
 		var m object
-		if json.Unmarshal(scanner.Bytes(), &m) != nil {
+		if json.Unmarshal(line, &m) != nil {
 			continue
 		}
 		id, _ := num(m, "id")
@@ -91,6 +125,9 @@ func fetchCodex(ctx context.Context, r Request, now time.Time) (Snapshot, error)
 				return Snapshot{}, failure("auth", "无法读取 Codex 订阅额度。请在 Codex CLI 登录 ChatGPT 账号。")
 			}
 			rates = obj(m["result"])
+			if rates != nil && account == nil {
+				grace = time.After(3 * time.Second)
+			}
 		case 3:
 			account = obj(m["result"])
 			if account == nil {
@@ -98,17 +135,11 @@ func fetchCodex(ctx context.Context, r Request, now time.Time) (Snapshot, error)
 			}
 		}
 		if rates != nil && account != nil {
-			s := parseCodex(rates, now)
-			a := obj(account["account"])
-			s.Account = str(a["email"])
-			if p := str(a["planType"]); p != "" {
-				s.Plan = p
-			}
-			return s, nil
+			return finish(), nil
 		}
 	}
 	if rates != nil {
-		return parseCodex(rates, now), nil
+		return finish(), nil
 	}
 	return Snapshot{}, failure("cli", "Codex 查询超时或连接已关闭，请更新 CLI 后重试")
 }

@@ -34,6 +34,9 @@ func TestCodexRPCSubprocessHelper(t *testing.T) {
 		case "account/rateLimits/read":
 			fmt.Println(`{"id":2,"result":{"rateLimits":{"primary":{"usedPercent":82,"windowDurationMins":300,"resetsAt":1790450000}}}}`)
 		case "account/read":
+			if os.Getenv("PLANWATCH_RPC_NO_ACCOUNT") == "1" {
+				continue
+			}
 			fmt.Println(`{"id":3,"result":{"account":{"type":"chatgpt","email":"example@example.test","planType":"plus"}}}`)
 		default:
 			os.Exit(3)
@@ -89,4 +92,16 @@ func TestCodexRejectsRelativeOverride(t *testing.T) {
 	if e == nil || strings.Contains(e.Error(), "secret") {
 		t.Fatal(e)
 	}
+}
+func TestCodexDoesNotWaitForMissingAccountReply(t *testing.T) {
+	path := fakeCodex(t)
+	t.Setenv("PLANWATCH_RPC_NO_ACCOUNT", "1")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	start := time.Now()
+	s, e := fetchCodex(ctx, Request{CodexPath: path}, testNow)
+	if e != nil || time.Since(start) > 10*time.Second {
+		t.Fatalf("waited %v: %v", time.Since(start), e)
+	}
+	checkPercent(t, s.Windows[0], 82)
 }

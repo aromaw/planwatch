@@ -188,6 +188,9 @@ func parseOpenCode(root object, now time.Time) Snapshot {
 		sort.Strings(keys)
 		for _, k := range keys {
 			m := obj(models[k])
+			if m == nil {
+				continue
+			}
 			if u := obj(m["usage"]); u != nil {
 				m = u
 			}
