@@ -17,7 +17,7 @@ jobs:
       - run: go test -race ./... && go vet ./...
         working-directory: collector
   mac:
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
