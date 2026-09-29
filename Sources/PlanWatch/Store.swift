@@ -45,15 +45,15 @@ final class Store: ObservableObject {
             records = try Storage.load([String: AlertRecord].self, file: "alerts.json") ?? [:]
         } catch { notice = "本地配置无法读取，已使用默认设置。请重新检查账号配置。" }
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                guard let self else { return }
                 self.now = Date(); self.refresh()
             }
         }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification,
                                                                          object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                guard let self else { return }
                 self.now = Date(); self.refresh(force: true)
             }
         }
